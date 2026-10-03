@@ -1,5 +1,7 @@
 # Edge Experiments
 
+[English](README.md) · [Português](README.pt-BR.md)
+
 A/B tests and feature flags for landing and sales pages, assigned in Next.js `proxy.ts` before the page renders, with a results page that does the statistics properly.
 
 [![CI](https://github.com/trichains/edge-experiments/actions/workflows/ci.yml/badge.svg)](https://github.com/trichains/edge-experiments/actions/workflows/ci.yml)
@@ -24,7 +26,8 @@ The variant decision doesn't need the browser. It needs a visitor id, the experi
 - **Tracking**: `navigator.sendBeacon('/api/track')` for exposures (once the page mounts) and conversions. A unique index on (experiment, visitor, kind, goal) makes every event idempotent, so all counts are unique visitors.
 - **Results page** (`/dashboard/experiments/[key]`): visitors and conversions per variant, conversion rate with a Wilson 95% interval, relative uplift vs. control, two-sided two-proportion z-test p-value, a verdict label, an interval chart and a sample size calculator (baseline, MDE absolute or relative, α = 0.05, power = 0.8). Start, pause and finish from the same page.
 - **Flags page** (`/dashboard/flags`): toggle, rollout slider, kill switch.
-- **Demo** (`/demo/landing`): a landing page for a fictional invoicing product with two hero variants (headline + CTA copy and color), a header-mode social proof experiment at 50% allocation, and two flags. A debug chip shows your variant and has a "switch variant" link. The results page has a sandbox-only **Simulate traffic** form that generates synthetic visitors with the true conversion rates you choose.
+- **Mutation access**: with `ADMIN_TOKEN` set, every change needs the token. Without it, changes are allowed only in sandbox mode; with a real database and no token they're refused.
+- **Demo** (`/demo/landing`): a landing page for a fictional invoicing product with two hero variants (headline + CTA copy and color), a header-mode social proof experiment at 50% allocation, and two flags. A debug chip shows your variant and has a "switch variant" link. The results page has a sandbox-only **Simulate traffic** form that generates synthetic visitors with the true conversion rates you choose (up to 5,000 per run and 100,000 per experiment).
 
 ## Architecture
 
@@ -53,8 +56,8 @@ sequenceDiagram
 ```
 
 1. The proxy runs for page requests only (the matcher skips `/api`, `/_next` and static files).
-2. It loads the config from `/api/config`, keeping a 30 s in-memory copy per instance on top of the CDN cache. If the config can't be loaded, the request passes through untouched and the page renders its control.
-3. Existing cookie assignments win while the experiment is running (sticky). New visitors are checked against targeting, then the allocation gate, then the weighted pick. Visitors who don't qualify aren't stored, so they're re-evaluated on the next request.
+2. It loads the config from `/api/config`, keeping a 30 s in-memory copy per instance on top of the CDN cache. Concurrent requests share one fetch. If the config can't be loaded, the request passes through untouched and the page renders its control; the failure is remembered for 5 s so a broken config endpoint isn't hit on every request.
+3. Existing cookie assignments win while the experiment is running (sticky) and are forwarded on every page. New visitors are only enrolled on a request for the experiment's `path` (or below it): targeting first, then the allocation gate, then the weighted pick. Visitors who don't qualify aren't stored, so they're re-evaluated on the next request.
 4. Server components read the assignment with `getVariant()` from the forwarded header. That covers the very first request too, before the cookie exists in the browser.
 5. The client provider gets the same snapshot from the server, so hydration matches the HTML. After mount it sends one exposure beacon for the experiments the page actually rendered.
 6. `/api/track` takes the visitor id and assignments from the first-party cookies, never from the body, and re-validates every pair against the config.
@@ -111,8 +114,8 @@ npm run dev                  # seeds the demo fixtures if the experiments table 
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | no | Postgres connection string. Empty means sandbox mode (in-memory PGlite). |
-| `NEXT_PUBLIC_APP_URL` | no | Public URL, used for metadata. |
-| `ADMIN_TOKEN` | no | When set, dashboard mutations require `Authorization: Bearer <token>`. |
+| `NEXT_PUBLIC_APP_URL` | recommended in production | Public URL, used for metadata. Falls back to `VERCEL_PROJECT_PRODUCTION_URL` on Vercel, then `http://localhost:3102`. |
+| `ADMIN_TOKEN` | required to change anything when `DATABASE_URL` is set | Dashboard mutations require `Authorization: Bearer <token>`. Unset: open in sandbox mode, refused with a real database. |
 
 Tests:
 
@@ -128,6 +131,10 @@ The statistics tests cite their references in the test file: R's `qnorm`/`pnorm`
 ## Demo and limitations
 
 The public demo runs in sandbox mode: data lives in memory and resets whenever the server instance restarts. The seeded results (a finished checkout test and some landing-hero traffic) are synthetic and labelled as such on the results page. Each serverless instance has its own PGlite copy, so two requests can see different data on a busy deployment; with `DATABASE_URL` set that goes away.
+
+In sandbox mode without `ADMIN_TOKEN`, anyone using the demo can toggle flags, pause experiments or simulate traffic. That's intentional for a demo, and everything resets on the next cold start.
+
+On Vercel preview deployments with Deployment Protection enabled, the proxy's request to its own `/api/config` gets a 401, so every visitor sees the control. Production deployments aren't affected. To test experiments on a protected preview, use a protection bypass or point the proxy at an unprotected config source (Edge Config would avoid the self-request entirely).
 
 Known limitations:
 
