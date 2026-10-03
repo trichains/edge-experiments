@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { isSandbox } from "@/lib/env";
 import { LANDING_EXPERIMENTS } from "@/lib/experiments";
 import { ExperimentsProvider } from "@/lib/sdk/client";
 import { getAssignments } from "@/lib/sdk/server";
@@ -16,7 +17,7 @@ export default async function DemoLandingLayout({ children }: LayoutProps<"/demo
       <div className="min-h-full bg-[#fbfaf8] text-[#1b1d21]" style={{ colorScheme: "light" }}>
         {children}
       </div>
-      <DebugChip sandbox={!process.env.DATABASE_URL} />
+      <DebugChip sandbox={isSandbox()} />
     </ExperimentsProvider>
   );
 }

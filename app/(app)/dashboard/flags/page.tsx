@@ -21,7 +21,8 @@ export default async function FlagsPage() {
       {isAdminProtected() && <AdminTokenField />}
       <ul className="divide-y divide-border rounded-lg border border-border">
         {flags.map((f) => (
-          <FlagRow key={f.key} flag={f} />
+          // Keyed on the rollout too, so the slider resets to the saved value after every refresh.
+          <FlagRow key={`${f.key}:${f.rollout}`} flag={f} />
         ))}
       </ul>
     </div>

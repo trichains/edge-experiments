@@ -4,8 +4,14 @@ import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 
+function siteUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  return "http://localhost:3102";
+}
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3102"),
+  metadataBase: new URL(siteUrl()),
   title: { default: "Edge Experiments", template: "%s · Edge Experiments" },
   description:
     "A/B tests and feature flags for conversion pages, assigned in Next.js proxy.ts before the page renders. Sticky cookies, no flicker, Wilson intervals and z-tests on the results page.",

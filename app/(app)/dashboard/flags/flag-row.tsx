@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useId, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { adminFetch, useAdminToken } from "@/components/admin";
 import type { FlagDefinition } from "@/lib/core/types";
 
@@ -12,15 +12,24 @@ export function FlagRow({ flag }: { flag: FlagDefinition }) {
   const [rollout, setRollout] = useState(flag.rollout);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const keyboardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (keyboardTimer.current) clearTimeout(keyboardTimer.current);
+  }, []);
 
   async function patch(body: Partial<Pick<FlagDefinition, "enabled" | "rollout" | "killSwitch">>) {
     setError(null);
     const res = await adminFetch(`/api/flags/${flag.key}`, { method: "PATCH", token, body: JSON.stringify(body) });
     if (!res.ok) {
       setError(res.status === 401 ? "Admin token required." : `Failed (${res.status}).`);
+      setRollout(flag.rollout);
       return;
     }
     startTransition(() => router.refresh());
+  }
+
+  function commitRollout(value: number) {
+    if (value !== flag.rollout) void patch({ rollout: value });
   }
 
   const effective = flag.killSwitch ? "Off (kill switch)" : !flag.enabled ? "Off" : `On for ${flag.rollout}%`;
@@ -65,8 +74,13 @@ export function FlagRow({ flag }: { flag: FlagDefinition }) {
             step={5}
             value={rollout}
             onChange={(e) => setRollout(Number(e.target.value))}
-            onPointerUp={() => rollout !== flag.rollout && void patch({ rollout })}
-            onKeyUp={() => rollout !== flag.rollout && void patch({ rollout })}
+            onPointerUp={() => commitRollout(rollout)}
+            onKeyUp={() => {
+              // Arrow keys fire one keyup per step: wait until the user stops before saving.
+              if (keyboardTimer.current) clearTimeout(keyboardTimer.current);
+              const value = rollout;
+              keyboardTimer.current = setTimeout(() => commitRollout(value), 500);
+            }}
             className="w-28 accent-[var(--accent)]"
           />
           <span className="tabular w-10 text-right">{rollout}%</span>

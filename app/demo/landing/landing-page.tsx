@@ -48,15 +48,14 @@ export async function LandingPage({ hero }: { hero: HeroVariant }) {
           {copy.title}
         </h1>
         <p className="mt-5 max-w-2xl text-lg leading-relaxed text-[#4a4e55]">{copy.body}</p>
-        <div className="mt-8 flex flex-wrap items-center gap-4">
-          <CtaButton label={copy.cta} accent={copy.accent} />
-          <span className="text-sm text-[#6b6f76]">14 days free. No card required.</span>
+        <div className="mt-8">
+          <CtaButton label={copy.cta} accent={copy.accent} note="14 days free. No card required." />
         </div>
       </section>
 
       {socialProof === "logos" && (
         <section aria-label="Studios using Ledgerline" className="border-y border-[#ebe8e3] bg-white" data-testid="social-proof">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-10 gap-y-3 px-5 py-6 text-sm font-semibold text-[#8a8e95]">
+          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-10 gap-y-3 px-5 py-6 text-sm font-semibold text-[#6b6f76]">
             <span className="text-xs font-normal uppercase tracking-wide">Used by small studios like</span>
             {LOGOS.map((l) => (
               <span key={l}>{l}</span>
@@ -109,7 +108,7 @@ export async function LandingPage({ hero }: { hero: HeroVariant }) {
             ))}
           </div>
         )}
-        <p className="mt-3 text-xs text-[#8a8e95]">Pricing layout is controlled by the new-pricing-table flag (30% rollout).</p>
+        <p className="mt-3 text-xs text-[#6b6f76]">Pricing layout is controlled by the new-pricing-table flag.</p>
       </section>
     </div>
   );
