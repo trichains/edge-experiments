@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# env template is safe to commit
+!.env.example
+
+# build / test output
+/dist
+/test-results
+/playwright-report
+/blob-report
