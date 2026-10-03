@@ -14,7 +14,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # npm install instead of npm ci: lockfiles generated on Windows omit Linux-only optional wasm deps (@emnapi/*), which makes npm ci fail here.
+      - run: npm install --no-audit --no-fund
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
@@ -29,7 +30,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # npm install instead of npm ci: lockfiles generated on Windows omit Linux-only optional wasm deps (@emnapi/*), which makes npm ci fail here.
+      - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: npm run test:e2e
