@@ -80,6 +80,21 @@ describe("proxy.ts", () => {
     expect(res.headers.get("x-middleware-request-x-experiments")).toBe("landing-hero:control");
   });
 
+  it("shares one config fetch between concurrent requests and memoizes it", async () => {
+    const proxy = await load();
+    await Promise.all([1, 2, 3].map(() => proxy(new NextRequest("http://localhost:3102/demo/landing"))));
+    await proxy(new NextRequest("http://localhost:3102/demo/landing"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not enroll visitors on pages outside the experiment path", async () => {
+    const proxy = await load();
+    const res = await proxy(new NextRequest("http://localhost:3102/pricing"));
+    expect(res.cookies.get("ex_vid")).toBeDefined();
+    expect(res.cookies.get("ex_a")).toBeUndefined();
+    expect(res.headers.get("x-middleware-request-x-experiments")).toBe("");
+  });
+
   it("redirects direct visits to a variant route", async () => {
     const proxy = await load();
     const res = await proxy(new NextRequest("http://localhost:3102/demo/landing/outcome"));
@@ -95,6 +110,9 @@ describe("proxy.ts", () => {
     expect(isRewrite(res)).toBe(false);
     expect(res.cookies.get("ex_a")).toBeUndefined();
     expect(JSON.parse(String(warn.mock.calls[0][0])).event).toBe("proxy.config_unavailable");
+    // A failure is cached briefly: the next request doesn't hammer /api/config again.
+    await proxy(new NextRequest("http://localhost:3102/demo/landing"));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });
 });

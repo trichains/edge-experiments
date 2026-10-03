@@ -104,6 +104,6 @@ export const flagFixtures: FlagDefinition[] = [
  * so the seeded dashboards are stable across restarts. Clearly labelled as synthetic in the UI.
  */
 export const seededTraffic: Record<string, { visitors: number; rates: Record<string, number> }> = {
-  "checkout-guarantee": { visitors: 9800, rates: { control: 0.027, guarantee: 0.035 } },
+  "checkout-guarantee": { visitors: 4000, rates: { control: 0.028, guarantee: 0.042 } },
   "landing-hero": { visitors: 1400, rates: { control: 0.041, outcome: 0.048 } },
 };

@@ -65,10 +65,13 @@ export function syntheticEvents(
   return rows;
 }
 
+/** 2,000 rows x 9 columns = 18,000 bind parameters per statement. Larger batches broke PGlite in testing. */
+const CHUNK = 2000;
+
 export async function insertEvents(db: Db, rows: EventInsert[]): Promise<number> {
   let inserted = 0;
-  for (let i = 0; i < rows.length; i += 2000) {
-    const chunk = rows.slice(i, i + 2000);
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
     const result = await db.insert(events).values(chunk).onConflictDoNothing().returning({ id: events.id });
     inserted += result.length;
   }

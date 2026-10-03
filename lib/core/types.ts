@@ -39,7 +39,10 @@ export const experimentDefinitionSchema = z
     variants: z.array(variantSchema).min(2).max(6),
     targeting: targetingSchema.default({}),
     mode: experimentModeSchema,
-    /** Path the experiment applies to. In rewrite mode `path` is rewritten to `path/<variant>`. */
+    /**
+     * Path the experiment applies to: visitors are only enrolled on requests for this path or below it.
+     * In rewrite mode, a request for exactly `path` is rewritten to `path/<variant>`.
+     */
     path: z.string().regex(/^\/[a-z0-9\-/]*$/),
     primaryGoal: z.string().regex(/^[a-z0-9_]{1,64}$/),
   })

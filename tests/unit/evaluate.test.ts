@@ -47,12 +47,24 @@ describe("evaluate", () => {
     expect(r.rewrite?.variant).toBe(forced);
   });
 
-  it("does not rewrite other paths", () => {
-    expect(evaluate(config([hero]), VID, {}, ctx, "/pricing").rewrite).toBeNull();
+  it("only enrolls on the experiment path, but forwards existing assignments everywhere", () => {
+    const elsewhere = evaluate(config([hero]), VID, {}, ctx, "/pricing");
+    expect(elsewhere.rewrite).toBeNull();
+    expect(elsewhere.active).toEqual({});
+    expect(elsewhere.changed).toBe(false);
+    // "/demo/landingfoo" is not under "/demo/landing"
+    expect(evaluate(config([hero]), VID, {}, ctx, "/demo/landingfoo").active).toEqual({});
+    // below the path enrolls, but only the exact path is rewritten
+    const below = evaluate(config([hero]), VID, {}, ctx, "/demo/landing/faq");
+    expect(below.active["landing-hero"]).toBeDefined();
+    expect(below.rewrite).toBeNull();
+    const returning = evaluate(config([hero]), VID, { "landing-hero": "control" }, ctx, "/pricing");
+    expect(returning.active).toEqual({ "landing-hero": "control" });
+    expect(returning.rewrite).toBeNull();
   });
 
   it("drops cookie entries for unknown experiments or removed variants", () => {
-    const r = evaluate(config([hero]), VID, { gone: "a", "landing-hero": "deleted-variant" }, ctx, "/");
+    const r = evaluate(config([hero]), VID, { gone: "a", "landing-hero": "deleted-variant" }, ctx, "/demo/landing");
     expect(r.cookieAssignments.gone).toBeUndefined();
     expect(["control", "outcome"]).toContain(r.cookieAssignments["landing-hero"]);
     expect(r.changed).toBe(true);

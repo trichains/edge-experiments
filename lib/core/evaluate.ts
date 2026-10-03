@@ -22,7 +22,8 @@ export interface Evaluation {
  * Rules:
  * - An existing cookie assignment wins while the experiment is running and the variant still
  *   exists (stickiness; targeting is not re-checked).
- * - New visitors are only enrolled while the experiment is running.
+ * - New visitors are only enrolled while the experiment is running, and only on a request for the
+ *   experiment's path (or below it). Existing assignments are forwarded on every page.
  * - Visitors that fail targeting or the traffic gate are not stored, so they are re-evaluated on
  *   the next request (a later visit with a matching UTM can still enroll them).
  * - Cookie entries for experiments that no longer exist (or variants that were removed) are dropped.
@@ -35,6 +36,7 @@ export function evaluate(
   ctx: RequestContext,
   pathname: string,
 ): Evaluation {
+  const path = normalizePath(pathname);
   const byKey = new Map(config.experiments.map((e) => [e.key, e]));
   const cookieAssignments: Assignments = {};
   const active: Assignments = {};
@@ -56,6 +58,7 @@ export function evaluate(
       active[exp.key] = current;
       continue;
     }
+    if (!isUnderPath(path, exp.path)) continue;
     if (!matchesTargeting(exp.targeting, ctx)) continue;
     const variant = assignVariant(visitorId, exp);
     if (!variant) continue;
@@ -68,7 +71,6 @@ export function evaluate(
   for (const flag of config.flags) flags[flag.key] = evaluateFlag(visitorId, flag);
 
   let rewrite: Evaluation["rewrite"] = null;
-  const path = normalizePath(pathname);
   for (const exp of config.experiments) {
     if (exp.mode === "rewrite" && active[exp.key] && path === normalizePath(exp.path)) {
       rewrite = { experiment: exp, variant: active[exp.key] };
@@ -93,6 +95,11 @@ export function directVariantHit(config: EdgeConfig, pathname: string): Experime
     }
   }
   return null;
+}
+
+function isUnderPath(path: string, base: string): boolean {
+  const b = normalizePath(base);
+  return b === "/" || path === b || path.startsWith(`${b}/`);
 }
 
 export function normalizePath(p: string): string {

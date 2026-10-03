@@ -26,9 +26,13 @@ const COLD_CONFIG_TIMEOUT_MS = 8_000;
 // Best-effort per-instance memo. The docs warn that proxy globals are not shared or durable, so this
 // is only an optimisation on top of the CDN cache that /api/config's Cache-Control enables.
 let memo: { config: EdgeConfig; fetchedAt: number } | null = null;
+/** Concurrent requests on a cold or expired instance share one fetch. */
+let inflight: Promise<EdgeConfig | null> | null = null;
+/** After a failed fetch, don't retry on every request for a few seconds. */
+const FAILURE_BACKOFF_MS = 5_000;
+let failedAt = 0;
 
-async function loadConfig(origin: string): Promise<EdgeConfig | null> {
-  if (memo && Date.now() - memo.fetchedAt < CONFIG_TTL_MS) return memo.config;
+async function fetchConfig(origin: string): Promise<EdgeConfig | null> {
   try {
     const res = await fetch(new URL("/api/config", origin), {
       headers: { accept: "application/json" },
@@ -37,12 +41,23 @@ async function loadConfig(origin: string): Promise<EdgeConfig | null> {
     if (!res.ok) throw new Error(`status ${res.status}`);
     const config = edgeConfigSchema.parse(await res.json());
     memo = { config, fetchedAt: Date.now() };
+    failedAt = 0;
     return config;
   } catch (error) {
+    failedAt = Date.now();
     console.warn(JSON.stringify({ ts: new Date().toISOString(), level: "warn", event: "proxy.config_unavailable", error: String(error) }));
     // Serve the last known config if we have one; otherwise pages render their control experience.
     return memo?.config ?? null;
   }
+}
+
+async function loadConfig(origin: string): Promise<EdgeConfig | null> {
+  if (memo && Date.now() - memo.fetchedAt < CONFIG_TTL_MS) return memo.config;
+  if (failedAt && Date.now() - failedAt < FAILURE_BACKOFF_MS) return memo?.config ?? null;
+  inflight ??= fetchConfig(origin).finally(() => {
+    inflight = null;
+  });
+  return inflight;
 }
 
 export async function proxy(request: NextRequest) {
@@ -92,7 +107,7 @@ export async function proxy(request: NextRequest) {
   if (result.changed || isNewVisitor) {
     const encoded = encodeAssignments(result.cookieAssignments);
     if (encoded) response.cookies.set(ASSIGNMENTS_COOKIE, encoded, cookieOptions);
-    else response.cookies.delete(ASSIGNMENTS_COOKIE);
+    else if (request.cookies.has(ASSIGNMENTS_COOKIE)) response.cookies.delete(ASSIGNMENTS_COOKIE);
   }
   // Personalised responses (and anything setting cookies) must not be stored by shared caches.
   if (result.rewrite || isNewVisitor || result.changed) response.headers.set("Cache-Control", "private, no-store");
@@ -101,7 +116,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Pages only: skip API routes, Next internals and files with an extension.
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.[a-zA-Z0-9]+$).*)",
+    // Pages only: skip /api/* routes, Next internals and files with an extension.
+    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.[a-zA-Z0-9]+$).*)",
   ],
 };

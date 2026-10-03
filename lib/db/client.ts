@@ -13,7 +13,14 @@ interface DbState {
   close: () => Promise<void>;
 }
 
-const globalForDb = globalThis as typeof globalThis & { __edgeExperimentsDb?: DbState };
+/**
+ * Module-level singleton stored on globalThis: dev hot reloads re-evaluate this module, but the
+ * instance (and the in-flight init promise) survive, so there's never a second PGlite in one process.
+ */
+const globalForDb = globalThis as typeof globalThis & {
+  __edgeExperimentsDb?: DbState;
+  __edgeExperimentsDbPending?: Promise<DbState>;
+};
 
 export { isSandbox } from "../env";
 
@@ -44,32 +51,36 @@ async function createState(): Promise<DbState> {
   return { db, ready, mode: "sandbox", close: () => client.close() };
 }
 
-let pending: Promise<DbState> | undefined;
-
-/**
- * Module-level singleton stored on globalThis so dev hot reloads and every route in the same
- * process share one PGlite instance (and therefore the same in-memory data).
- */
+/** Returns a ready database. A failed init is cleared so the next call can retry. */
 export async function getDb(): Promise<Db> {
-  if (!globalForDb.__edgeExperimentsDb) {
-    pending ??= createState().then((state) => {
+  if (!globalForDb.__edgeExperimentsDbPending) {
+    const pending = createState().then(async (state) => {
       globalForDb.__edgeExperimentsDb = state;
+      try {
+        await state.ready;
+      } catch (error) {
+        globalForDb.__edgeExperimentsDb = undefined;
+        globalForDb.__edgeExperimentsDbPending = undefined;
+        await state.close().catch(() => undefined);
+        log.error("db.init_failed", { error: String(error) });
+        throw error;
+      }
       return state;
     });
-    await pending;
+    pending.catch(() => {
+      if (globalForDb.__edgeExperimentsDbPending === pending) globalForDb.__edgeExperimentsDbPending = undefined;
+    });
+    globalForDb.__edgeExperimentsDbPending = pending;
   }
-  const state = globalForDb.__edgeExperimentsDb!;
-  await state.ready;
+  const state = await globalForDb.__edgeExperimentsDbPending;
   return state.db;
 }
 
 /** Test helper: drop the singleton so the next getDb() starts from a fresh, re-seeded database. */
 export async function resetDbForTests(): Promise<void> {
-  const state = globalForDb.__edgeExperimentsDb;
+  const pending = globalForDb.__edgeExperimentsDbPending;
   globalForDb.__edgeExperimentsDb = undefined;
-  pending = undefined;
-  if (state) {
-    await state.ready.catch(() => undefined);
-    await state.close();
-  }
+  globalForDb.__edgeExperimentsDbPending = undefined;
+  const state = await pending?.catch(() => undefined);
+  await state?.close();
 }
