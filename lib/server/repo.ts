@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, gte, like, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "../db/client";
 import { events, experiments, flags, type ExperimentRow, type FlagRow } from "../db/schema";
@@ -105,9 +105,9 @@ export async function recordEvents(rows: NewEvent[]): Promise<number> {
 }
 
 /**
- * Unique exposed visitors per variant and, among them, unique visitors who converted on `goal`.
- * Conversions without a prior exposure in the same experiment are not counted, and a conversion is
- * credited to the variant the visitor was exposed to.
+ * Unique exposed visitors per variant and, among them, unique visitors who converted on `goal` at or
+ * after their exposure. Conversions without a prior exposure in the same experiment are not counted,
+ * and a conversion is credited to the variant the visitor was exposed to.
  */
 export async function getVariantCounts(experiment: Pick<ExperimentDefinition, "key" | "variants" | "primaryGoal">): Promise<VariantCounts[]> {
   const db = await getDb();
@@ -126,6 +126,8 @@ export async function getVariantCounts(experiment: Pick<ExperimentDefinition, "k
         eq(conv.visitorId, events.visitorId),
         eq(conv.kind, "conversion"),
         eq(conv.goal, experiment.primaryGoal),
+        // Only conversions that happened at or after the exposure count.
+        gte(conv.createdAt, events.createdAt),
       ),
     )
     .where(and(eq(events.experimentKey, experiment.key), eq(events.kind, "exposure")))
@@ -150,4 +152,14 @@ export async function countSyntheticEvents(experimentKey: string): Promise<{ tot
     .from(events)
     .where(and(eq(events.experimentKey, experimentKey), eq(events.kind, "exposure")));
   return { total: Number(row?.total ?? 0), synthetic: Number(row?.synthetic ?? 0) };
+}
+
+/** Simulated ("Simulate traffic") exposures for an experiment; used to cap sandbox memory use. */
+export async function countSimulatedExposures(experimentKey: string): Promise<number> {
+  const db = await getDb();
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(events)
+    .where(and(eq(events.experimentKey, experimentKey), eq(events.kind, "exposure"), like(events.visitorId, "sim-%")));
+  return Number(row?.count ?? 0);
 }

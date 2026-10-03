@@ -4,11 +4,16 @@ import { isSandbox } from "@/lib/env";
 import { insertEvents, syntheticEvents } from "@/lib/db/seed";
 import { log } from "@/lib/log";
 import { isAuthorized, unauthorized } from "@/lib/server/admin";
-import { getExperiment, toDefinition } from "@/lib/server/repo";
+import { countSimulatedExposures, getExperiment, toDefinition } from "@/lib/server/repo";
+
+/** Per-call cap. */
+const MAX_SIMULATED_PER_CALL = 5_000;
+/** Total simulated exposures kept per experiment, so the public demo can't be used to fill memory. */
+const MAX_SIMULATED_PER_EXPERIMENT = 100_000;
 
 const bodySchema = z.object({
   experimentKey: z.string().min(1),
-  visitors: z.number().int().min(10).max(20_000),
+  visitors: z.number().int().min(10).max(MAX_SIMULATED_PER_CALL),
   /** True conversion rate per variant key, 0-1. */
   rates: z.record(z.string(), z.number().min(0).max(1)),
 });
@@ -27,6 +32,18 @@ export async function POST(request: Request) {
   }
   const row = await getExperiment(parsed.data.experimentKey);
   if (!row) return Response.json({ error: "not_found" }, { status: 404 });
+
+  const existing = await countSimulatedExposures(row.key);
+  if (existing + parsed.data.visitors > MAX_SIMULATED_PER_EXPERIMENT) {
+    return Response.json(
+      {
+        error: "simulation_limit",
+        hint: `at most ${MAX_SIMULATED_PER_EXPERIMENT} simulated visitors per experiment; the sandbox resets on the next cold start`,
+        existing,
+      },
+      { status: 409 },
+    );
+  }
 
   const experiment = toDefinition(row);
   const rows = syntheticEvents(experiment, {

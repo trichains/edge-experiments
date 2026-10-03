@@ -15,8 +15,11 @@ const MAX_BODY_BYTES = 4096;
  */
 export async function POST(request: NextRequest) {
   const requestId = crypto.randomUUID();
+  // Reject oversized bodies before reading them when the client declares a length (beacons do).
+  const declared = Number(request.headers.get("content-length") ?? "0");
+  if (declared > MAX_BODY_BYTES) return Response.json({ error: "payload_too_large" }, { status: 413 });
   const raw = await request.text();
-  if (raw.length > MAX_BODY_BYTES) return Response.json({ error: "payload_too_large" }, { status: 413 });
+  if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) return Response.json({ error: "payload_too_large" }, { status: 413 });
 
   let json: unknown;
   try {
