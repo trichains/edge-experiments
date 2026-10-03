@@ -6,7 +6,7 @@ Testes A/B e feature flags para landing pages e páginas de vendas, com a varian
 
 [![CI](https://github.com/trichains/edge-experiments/actions/workflows/ci.yml/badge.svg)](https://github.com/trichains/edge-experiments/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Demo](https://img.shields.io/badge/demo-live-f2884b.svg)](https://edge-experiments.vercel.app)
+[![Demo](https://img.shields.io/badge/demo-live-f2884b.svg)](https://edge-experiments-rosy.vercel.app)
 
 ![banner](docs/banner.png)
 
